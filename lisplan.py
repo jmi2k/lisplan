@@ -34,61 +34,58 @@ BUILTINS = {
     'plan':  lambda Γ, *args: Plan(args),
     'true':  True,
     'false': False,
+    'nil':   []
 }
 
+# "Go to (100, 200), and then go to the kitchen"
 SRC = """
-(plan
-    (active-step
-        (type          GOTO)
-        (id            1)
-        (floor         nil)
-        (destination   [100 200])
-        (end           (close-to P [100 200]))
-        (post          (< V 0.01)))
-    (step
-        (type          GOTO)
-        (id            3)
-        (floor         Kitchen)
-        (destination   ?)
-        (end           (inside P Kitchen))
-        (post          (< V 0.01))))
+{plan
+    {objects
+        [the-kitchen nil]}
+    [steps
+        {GOTO
+            [active True]
+            [where  [100 200]]
+            [post   (∧ (near? [100 200]) (< V 0.01))]}
+        {GOTO
+            [active False]
+            [where  nil]
+            [pre    (near? [100 200])]
+            [post   (∧ (inside? the-kitchen) (< V 0.01))]}]}
 """
+
 
 class Step:
     def __init__(self, L):
-        self.type = None
-        self.id = None
+        self.type = L[0]
+        self.active = False
         self.attrs = {}
 
-        for item in L:
-            if item[0] == 'type':
-                self.type = item[1]
-            elif item[0] == 'id':
-                self.id = item[1]
+        for item in L[1:]:
+            if item[0] == 'active':
+                self.type = not not item[1]
             else:
                 k, v = item
                 self.attrs[k] = v
-
-        if not self.type or not self.id:
-            raise Exception('missing required attributes in plan')
 
     def __repr__(self):
         return f'Step {self.__dict__}'
 
 class Plan:
     def __init__(self, L):
-        self.active_step = None
-        self.steps = []
+        self.objects   = {}
+        self.relations = []
+        self.steps     = []
 
         for item in L:
-            if item[0] == 'active-step':
-                if self.active_step:
-                    raise Exception('multiple active steps detected')
-                self.active_step = Step(item[1:])
-            elif item[0] == 'step':
-                self.steps.append(Step(item[1:]))
+            if item[0] == 'objects':
+                self.objects = {k: v for k, v in item[1:]}
+            elif item[0] == 'relations':
+                self.relations = item[1:]
+            elif item[0] == 'steps':
+                self.steps = [Step(step) for step in item[1:]]
             else:
-                raise Exception('unexpected item inside plan')
+                raise Exception(f'invalid attribute {item[0]} for Plan')
 
     def __repr__(self):
         return f'Plan {self.__dict__}'
