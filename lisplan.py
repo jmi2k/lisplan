@@ -1,5 +1,6 @@
 #!/bin/python3
 
+from collections import defaultdict
 from operator import add, sub, mul, and_, or_, truediv
 from functools import reduce
 from itertools import islice
@@ -54,38 +55,61 @@ SRC = """
             [post   (∧ (inside? the-kitchen) (< V 0.01))]}]}
 """
 
+def get_attrs(schema, L, strict=False):
+    attrs = defaultdict(list)
+    rest  = []
+
+    for item in L:
+        if type(item) is not list:
+            if strict:
+                raise Exception('unexpected item found')
+            rest.append(item)
+        elif item[0] not in schema:
+            if strict:
+                raise Exception(f"unexpected attribute '{item[0]}' found")
+            rest.append(item)
+        else:
+            key, *val = item
+            attrs[key].append(val)
+
+    for key in schema:
+        if key not in attrs and 0 not in schema[key]:
+            raise Exception(f"required attribute '{key}' not found")
+        elif len(attrs[key]) > 1 and True not in schema[key]:
+            raise Exception(f"too many definitions of attribute '{key}'")
+        elif len(attrs[key]) == 1 and True not in schema[key]:
+            attrs[key] = attrs[key][0]
+
+    return attrs if strict else (attrs, rest)
 
 class Step:
-    def __init__(self, L):
-        self.type = L[0]
-        self.active = False
-        self.attrs = {}
+    def __init__(self, name, L):
+        schema = {
+            'active': [0],
+        }
 
-        for item in L[1:]:
-            if item[0] == 'active':
-                self.type = not not item[1]
-            else:
-                k, v = item
-                self.attrs[k] = v
+        attrs, rest = get_attrs(schema, L, strict=False)
+
+        self.name = name
+        self.active = attrs['active'] or False
+        self.attrs  = dict(rest)
 
     def __repr__(self):
         return f'Step {self.__dict__}'
 
 class Plan:
     def __init__(self, L):
-        self.objects   = {}
-        self.relations = []
-        self.steps     = []
+        schema = {
+            'objects':   [0],
+            'relations': [0],
+            'steps':     [0],
+        }
 
-        for item in L:
-            if item[0] == 'objects':
-                self.objects = {k: v for k, v in item[1:]}
-            elif item[0] == 'relations':
-                self.relations = item[1:]
-            elif item[0] == 'steps':
-                self.steps = [Step(step) for step in item[1:]]
-            else:
-                raise Exception(f'invalid attribute {item[0]} for Plan')
+        attrs = get_attrs(schema, L, strict=True)
+
+        self.objects   = dict(attrs['objects'])
+        self.relations = attrs['relations']
+        self.steps     = [Step(step[0], step[1:]) for step in attrs['steps']]
 
     def __repr__(self):
         return f'Plan {self.__dict__}'
